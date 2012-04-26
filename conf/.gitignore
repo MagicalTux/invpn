@@ -1,0 +1,4 @@
+*.crt
+*.db
+*.req
+*.key

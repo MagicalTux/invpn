@@ -6,7 +6,9 @@ TEMPLATE = app
 TARGET = 
 DEPENDPATH += .
 INCLUDEPATH += .
+QT -= gui
+QT += sql network
 
 # Input
-HEADERS += QTap.hpp
-SOURCES += main.cpp QTap.cpp
+HEADERS += QTap.hpp InVpn.hpp
+SOURCES += main.cpp QTap.cpp InVpn.cpp

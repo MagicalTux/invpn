@@ -21,7 +21,7 @@ struct tap_packet {
 	} data;
 } __attribute__((packed));
 
-QTap::QTap(const QString &pref_name) {
+QTap::QTap(const QString &pref_name, QObject *parent): QObject(parent) {
 	struct ifreq ifr;
 
 	tap_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
@@ -68,7 +68,25 @@ void QTap::activity(int fd) {
 	QByteArray src_hw(buffer.data.raw+6, 6);
 	QByteArray dst_hw(buffer.data.raw, 6);
 
-	qDebug("packet data: [%s] => [%s] %s", src_hw.toHex().constData(), dst_hw.toHex().constData(), data.toHex().constData());
 	packet(src_hw, dst_hw, data);
+}
+
+void QTap::setMac(const QByteArray &mac) {
+	if (tap_fd <= 0) return;
+
+	int s;
+	struct ifreq ifhw;
+
+	s = socket(PF_INET, SOCK_DGRAM, 0);
+	memset(&ifhw, 0, sizeof(ifhw));
+	strncpy(ifhw.ifr_name, name.toLatin1().constData(), IFNAMSIZ);
+	ifhw.ifr_hwaddr.sa_family = ARPHRD_ETHER;
+	memcpy(&ifhw.ifr_hwaddr.sa_data, mac.constData(), ETH_ALEN);
+	if (ioctl(s, SIOCSIFHWADDR, (void*) &ifhw) < 0) {
+		qDebug("SIOCSIFHWADDR failed");
+		close(s);
+		return;
+	}
+	close(s);
 }
 
