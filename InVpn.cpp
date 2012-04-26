@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QSslConfiguration>
 #include <QDateTime>
+#include <qendian.h>
 
 static inline QString invpn_socket_name(const QAbstractSocket *s) {
 	QHostAddress h = s->peerAddress();
@@ -96,9 +97,17 @@ InVpn::InVpn() {
 void InVpn::checkNodes() {
 	// broadcast to all peers that we are here
 	QByteArray pkt;
-	QDataStream s(&pkt, QIODevice::WriteOnly);
-	s.setVersion(QDataStream::Qt_4_6);
-	s << (qint8)0 << broadcastId() << mac;
+
+	qint64 ts = qToBigEndian(broadcastId());
+
+	pkt.append((char)1); // version
+	pkt.append((char*)&ts, 8);
+	pkt.append(mac);
+
+	pkt.prepend((char)0);
+	quint16 len = pkt.size();
+	len = qToBigEndian(len);
+	pkt.prepend((char*)&len, 2);
 
 	qDebug("broadcast: %s", pkt.toHex().constData());
 	auto i = peers.begin();
