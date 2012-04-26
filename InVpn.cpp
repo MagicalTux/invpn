@@ -39,7 +39,7 @@ InVpn::InVpn() {
 		QCoreApplication::exit(1);
 		return;
 	}
-	if (ssl_ca.at(0).isNull()) {
+	if (ssl_ca.size() == 0) {
 		qDebug("failed to parse CA file");
 		QCoreApplication::exit(1);
 		return;
@@ -69,7 +69,16 @@ InVpn::InVpn() {
 	qDebug("got interface: %s", qPrintable(tap->getName()));
 }
 
+bool InVpn::isValid() {
+	if (tap == NULL) return false;
+	return true;
+}
+
 void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data) {
+	if (src_hw != mac) {
+		qDebug("dropped packet from wrong mac addr");
+		return;
+	}
 	qDebug("packet data: [%s] => [%s] %s", src_hw.toHex().constData(), dst_hw.toHex().constData(), data.toHex().constData());
 }
 
@@ -82,7 +91,6 @@ void InVpn::parseCmdLine() {
 	db_path = "conf/client.db";
 
 	QStringList cmdline = QCoreApplication::arguments();
-	qDebug("cmdline size=%d", cmdline.size());
 
 	// Why isn't there a cmdline parser included with Qt? ;_;
 	for(int i = 1; i < cmdline.size(); i++) {

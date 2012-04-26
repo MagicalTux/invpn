@@ -10,5 +10,5 @@ QT -= gui
 QT += sql network
 
 # Input
-HEADERS += QTap.hpp InVpn.hpp
-SOURCES += main.cpp QTap.cpp InVpn.cpp
+HEADERS += QTap.hpp InVpn.hpp InVpnSslServer.hpp
+SOURCES += main.cpp QTap.cpp InVpn.cpp InVpnSslServer.cpp

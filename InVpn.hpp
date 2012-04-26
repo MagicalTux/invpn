@@ -11,6 +11,7 @@ public:
 
 public slots:
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);
+	bool isValid();
 
 private:
 	QTap *tap;
