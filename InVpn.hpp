@@ -7,13 +7,7 @@
 #include "QTap.hpp"
 #include "InVpnSslServer.hpp"
 
-struct invpn_node_info {
-	QByteArray mac;
-	qint64 first_seen;
-	qint64 last_seen;
-	qint64 bcast_value;
-	QString peer;
-};
+class InVpnNode;
 
 class InVpn: public QObject {
 	Q_OBJECT;
@@ -26,9 +20,13 @@ public slots:
 	void accept(QSslSocket*);
 
 	void sslErrors(const QList<QSslError>&);
+	void socketReady();
 	void socketLost();
 
-	void checkNodes();
+	void announce();
+
+signals:
+	void broadcast(const QByteArray&);
 
 private:
 	QTap *tap;
@@ -37,8 +35,7 @@ private:
 	qint64 broadcastId();
 	qint64 bc_last_id;
 
-	QMap<QByteArray, struct invpn_node_info*> nodes;
-	QMap<QString, QSslSocket*> peers;
+	QMap<QByteArray, InVpnNode*> nodes;
 
 	QSqlDatabase db;
 
@@ -59,4 +56,13 @@ private:
 	QString init_seed; // initial peer if none found
 	int port;
 };
+
+// helper
+static inline QString invpn_socket_name(const QAbstractSocket *s) {
+	QHostAddress h = s->peerAddress();
+	if (h.protocol() == QAbstractSocket::IPv4Protocol) {
+		return h.toString()+QString(":")+QString::number(s->peerPort());
+	}
+	return QString("[")+h.toString()+QString("]:")+QString::number(s->peerPort());
+}
 

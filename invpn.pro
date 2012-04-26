@@ -12,5 +12,5 @@ QT += sql network
 QMAKE_CXXFLAGS += -std=gnu++0x
 
 # Input
-HEADERS += QTap.hpp InVpn.hpp InVpnSslServer.hpp
-SOURCES += main.cpp QTap.cpp InVpn.cpp InVpnSslServer.cpp
+HEADERS += QTap.hpp InVpn.hpp InVpnSslServer.hpp InVpnNode.hpp
+SOURCES += main.cpp QTap.cpp InVpn.cpp InVpnSslServer.cpp InVpnNode.cpp

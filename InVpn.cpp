@@ -1,19 +1,11 @@
 #include "InVpn.hpp"
+#include "InVpnNode.hpp"
 #include <QCoreApplication>
 #include <QStringList>
 #include <QFile>
 #include <QSslConfiguration>
 #include <QDateTime>
 #include <qendian.h>
-
-static inline QString invpn_socket_name(const QAbstractSocket *s) {
-	QHostAddress h = s->peerAddress();
-	if (h.protocol() == QAbstractSocket::IPv4Protocol) {
-		return h.toString()+QString(":")+QString::number(s->peerPort());
-	}
-	return QString("[")+h.toString()+QString("]:")+QString::number(s->peerPort());
-	
-}
 
 InVpn::InVpn() {
 	tap = NULL;
@@ -85,7 +77,7 @@ InVpn::InVpn() {
 
 	connect(server, SIGNAL(ready(QSslSocket*)), this, SLOT(accept(QSslSocket*)));
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
-	connect(&check, SIGNAL(timeout()), this, SLOT(checkNodes()));
+	connect(&check, SIGNAL(timeout()), this, SLOT(announce()));
 
 	check.setInterval(10000);
 	check.setSingleShot(false);
@@ -94,7 +86,7 @@ InVpn::InVpn() {
 	qDebug("got interface: %s", qPrintable(tap->getName()));
 }
 
-void InVpn::checkNodes() {
+void InVpn::announce() {
 	// broadcast to all peers that we are here
 	QByteArray pkt;
 
@@ -110,12 +102,7 @@ void InVpn::checkNodes() {
 	pkt.prepend((char*)&len, 2);
 
 	qDebug("broadcast: %s", pkt.toHex().constData());
-	auto i = peers.begin();
-	while(i != peers.end()) {
-		i.value()->write(pkt);
-	}
-	
-	qDebug("TODO CHECK NODES");
+	broadcast(pkt);
 }
 
 qint64 InVpn::broadcastId() {
@@ -132,6 +119,7 @@ qint64 InVpn::broadcastId() {
 void InVpn::accept(QSslSocket*s) {
 	connect(s, SIGNAL(sslErrors(const QList<QSslError>&)), this, SLOT(sslErrors(const QList<QSslError>&)));
 	connect(s, SIGNAL(disconnected()), this, SLOT(socketLost()));
+	connect(s, SIGNAL(encrypted()), this, SLOT(socketReady()));
 	s->startServerEncryption();
 }
 
@@ -148,14 +136,33 @@ void InVpn::sslErrors(const QList<QSslError>&l) {
 	s->deleteLater();
 }
 
+void InVpn::socketReady() {
+	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
+	if (!s) return;
+
+	QSslCertificate p = s->peerCertificate();
+	QString tmpmac = p.subjectInfo(QSslCertificate::CommonName); // xx:xx:xx:xx:xx:xx
+	QByteArray m = QByteArray::fromHex(tmpmac.toLatin1().replace(":",""));
+
+	// do we know this node ?
+	if (!nodes.contains(m)) {
+		nodes.insert(m, new InVpnNode(this, m));
+		connect(this, SIGNAL(broadcast(const QByteArray&)), nodes.value(m), SLOT(push(const QByteArray&)));
+	}
+	if (!nodes.value(m)->setLink(s)) {
+		s->disconnect();
+		s->deleteLater();
+	}
+}
+
 void InVpn::socketLost() {
 	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
 	if (!s) return;
 
-	QString peer = invpn_socket_name(s);
-	qDebug("lost peer %s", qPrintable(peer));
-
-	peers.remove(peer);
+//	QString peer = invpn_socket_name(s);
+//	qDebug("lost peer %s", qPrintable(peer));
+//
+//	peers.remove(peer);
 	s->deleteLater();
 }
 

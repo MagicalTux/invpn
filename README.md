@@ -24,9 +24,10 @@ CA with Common Name set to the node's MAC address.
 Packet types
 ------------
 
-* 0: info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes MAC addr
-* 1: targetted packet. 6 bytes dst, 6 bytes src, data
-* 2: broadcast. 8 bytes id, 6 bytes src, data
+* 0: initial info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes MAC addr
+* 1: info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes mac, 1 byte type (ipv4/ipv6), n bytes ip, 2 bytes port
+* 80: targetted packet. 6 bytes dst, 6 bytes src, data
+* 81: broadcast. 8 bytes id, 6 bytes src, data
 
 Each packet is made of 2 bytes for the length (big endian), then 1 byte type.
 The length is not counted as part of the packet when computing its length.
