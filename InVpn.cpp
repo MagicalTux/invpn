@@ -3,9 +3,20 @@
 #include <QStringList>
 #include <QFile>
 #include <QSslConfiguration>
+#include <QDateTime>
+
+static inline QString invpn_socket_name(const QAbstractSocket *s) {
+	QHostAddress h = s->peerAddress();
+	if (h.protocol() == QAbstractSocket::IPv4Protocol) {
+		return h.toString()+QString(":")+QString::number(s->peerPort());
+	}
+	return QString("[")+h.toString()+QString("]:")+QString::number(s->peerPort());
+	
+}
 
 InVpn::InVpn() {
 	tap = NULL;
+	bc_last_id = 0;
 	parseCmdLine();
 
 	// initialize DB
@@ -73,13 +84,45 @@ InVpn::InVpn() {
 
 	connect(server, SIGNAL(ready(QSslSocket*)), this, SLOT(accept(QSslSocket*)));
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
+	connect(&check, SIGNAL(timeout()), this, SLOT(checkNodes()));
+
+	check.setInterval(10000);
+	check.setSingleShot(false);
+	check.start();
 
 	qDebug("got interface: %s", qPrintable(tap->getName()));
 }
 
+void InVpn::checkNodes() {
+	// broadcast to all peers that we are here
+	QByteArray pkt;
+	QDataStream s(&pkt, QIODevice::WriteOnly);
+	s.setVersion(QDataStream::Qt_4_6);
+	s << (qint8)0 << broadcastId() << mac;
+
+	qDebug("broadcast: %s", pkt.toHex().constData());
+	auto i = peers.begin();
+	while(i != peers.end()) {
+		i.value()->write(pkt);
+	}
+	
+	qDebug("TODO CHECK NODES");
+}
+
+qint64 InVpn::broadcastId() {
+	// return a milliseconds unique timestamp, let's hope we won't have a sustained 1000 pkt/sec of broadcast
+	qint64 now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+	if (now <= bc_last_id) {
+		bc_last_id++;
+		return bc_last_id;
+	}
+	bc_last_id = now;
+	return now;
+}
+
 void InVpn::accept(QSslSocket*s) {
 	connect(s, SIGNAL(sslErrors(const QList<QSslError>&)), this, SLOT(sslErrors(const QList<QSslError>&)));
-	connect(s, SIGNAL(disconnected()), s, SLOT(deleteLater()));
+	connect(s, SIGNAL(disconnected()), this, SLOT(socketLost()));
 	s->startServerEncryption();
 }
 
@@ -93,6 +136,17 @@ void InVpn::sslErrors(const QList<QSslError>&l) {
 		qDebug("Source was not a QsslSocket? :(");
 		return;
 	}
+	s->deleteLater();
+}
+
+void InVpn::socketLost() {
+	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
+	if (!s) return;
+
+	QString peer = invpn_socket_name(s);
+	qDebug("lost peer %s", qPrintable(peer));
+
+	peers.remove(peer);
 	s->deleteLater();
 }
 
@@ -136,6 +190,9 @@ void InVpn::parseCmdLine() {
 		}
 		if (tmp == "-p") {
 			port = cmdline.at(i+1).toInt(); i++; continue;
+		}
+		if (tmp == "-t") {
+			init_seed = cmdline.at(i+1); i++; continue;
 		}
 		// ignore unrecognized args
 	}
