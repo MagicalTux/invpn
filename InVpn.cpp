@@ -56,6 +56,13 @@ InVpn::InVpn() {
 	QString tmpmac = ssl_cert.subjectInfo(QSslCertificate::CommonName);
 	mac = QByteArray::fromHex(tmpmac.toLatin1().replace(":",""));
 
+	server = new InVpnSslServer();
+	if (!server->listen(QHostAddress::Any, port)) {
+		qDebug("failed to listen to net");
+		QCoreApplication::exit(1);
+		return;
+	}
+
 	tap = new QTap("invpn%d", this);
 	if (!tap->isValid()) {
 		delete tap;
@@ -64,9 +71,29 @@ InVpn::InVpn() {
 	}
 	tap->setMac(mac);
 
+	connect(server, SIGNAL(ready(QSslSocket*)), this, SLOT(accept(QSslSocket*)));
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
 
 	qDebug("got interface: %s", qPrintable(tap->getName()));
+}
+
+void InVpn::accept(QSslSocket*s) {
+	connect(s, SIGNAL(sslErrors(const QList<QSslError>&)), this, SLOT(sslErrors(const QList<QSslError>&)));
+	connect(s, SIGNAL(disconnected()), s, SLOT(deleteLater()));
+	s->startServerEncryption();
+}
+
+void InVpn::sslErrors(const QList<QSslError>&l) {
+	qDebug("SSL errors in peer connection:");
+	for(int i = 0; i < l.size(); i++) {
+		qDebug(" * %s", qPrintable(l.at(i).errorString()));
+	}
+	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
+	if (!s) {
+		qDebug("Source was not a QsslSocket? :(");
+		return;
+	}
+	s->deleteLater();
 }
 
 bool InVpn::isValid() {

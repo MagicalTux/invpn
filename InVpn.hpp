@@ -2,7 +2,9 @@
 #include <QSqlDatabase>
 #include <QSslKey>
 #include <QSslCertificate>
+#include <QSslSocket>
 #include "QTap.hpp"
+#include "InVpnSslServer.hpp"
 
 class InVpn: public QObject {
 	Q_OBJECT;
@@ -12,9 +14,13 @@ public:
 public slots:
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);
 	bool isValid();
+	void accept(QSslSocket*);
+
+	void sslErrors(const QList<QSslError>&);
 
 private:
 	QTap *tap;
+	InVpnSslServer *server;
 
 	QSqlDatabase db;
 
