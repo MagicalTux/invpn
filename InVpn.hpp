@@ -20,6 +20,8 @@ class InVpn: public QObject {
 public:
 	InVpn();
 
+	void connectTo(const QString &id, const QHostAddress &addr, quint16 port);
+
 public slots:
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);
 	bool isValid();
@@ -32,7 +34,7 @@ public slots:
 
 	void announce();
 	void tryConnect();
-	void announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt);
+	void announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QHostAddress&, quint16 port, const QByteArray &pkt);
 
 	void route(const QByteArray&); // route a 0x80 packet to appropriate node
 	void routeBroadcast(const QByteArray&); // route a 0x8& packet to appropriate nodes

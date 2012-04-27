@@ -5,21 +5,14 @@
 #include <QFile>
 #include <QSslConfiguration>
 #include <QDateTime>
+#include <QSqlQuery>
+#include <QSqlError>
 #include <qendian.h>
 
 InVpn::InVpn() {
 	tap = NULL;
 	bc_last_id = 0;
 	parseCmdLine();
-
-	// initialize DB
-	db = QSqlDatabase::addDatabase("QSQLITE");
-	db.setDatabaseName(db_path);
-	if (!db.open()) {
-		qDebug("Could not open database");
-		QCoreApplication::exit(1);
-		return;
-	}
 
 	// initialize SSL
 	QFile key_file(key_path);
@@ -48,6 +41,17 @@ InVpn::InVpn() {
 		QCoreApplication::exit(1);
 		return;
 	}
+
+	// initialize DB
+	db = QSqlDatabase::addDatabase("QSQLITE");
+	db.setDatabaseName(db_path);
+	if (!db.open()) {
+		qDebug("Could not open database");
+		QCoreApplication::exit(1);
+		return;
+	}
+
+	db.exec("CREATE TABLE IF NOT EXISTS peer_info (mac CHAR(17) UNIQUE, peer_ip VARCHAR(37), peer_port INT)");
 
 	// Set CA list for all future configs
 	QSslConfiguration config = QSslConfiguration::defaultConfiguration();
@@ -138,6 +142,10 @@ void InVpn::tryConnect() {
 		return;
 	}
 
+	connectTo(rmac, ip, port);
+}
+
+void InVpn::connectTo(const QString &id, const QHostAddress &ip, quint16 port) {
 	qDebug("trying to connect to %s on port %d", qPrintable(ip.toString()), port);
 
 	QSslSocket *s = new QSslSocket(this);
@@ -147,7 +155,7 @@ void InVpn::tryConnect() {
 	connect(s, SIGNAL(disconnected()), this, SLOT(socketLost()));
 	connect(s, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(socketError(QAbstractSocket::SocketError)));
 	s->connectToHost(ip, port);
-	s->setPeerVerifyName(rmac);
+	s->setPeerVerifyName(id);
 }
 
 void InVpn::announce() {
@@ -159,6 +167,9 @@ void InVpn::announce() {
 	pkt.append((char)1); // version
 	pkt.append((char*)&ts, 8);
 	pkt.append(mac);
+	quint16 p = port;
+	p = qToBigEndian(p);
+	pkt.append((char*)&p, 2);
 
 	pkt.prepend((char)0);
 	quint16 len = pkt.size();
@@ -297,8 +308,8 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 //	nodes.value(dst_hw).push(pkt);
 }
 
-void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt) {
-//	qDebug("got route to %s stamp %lld", dmac.toHex().constData(), stamp);
+void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QHostAddress &addr, quint16 port, const QByteArray &pkt) {
+	qDebug("got route to %s stamp %lld, connectable via %s port %d", dmac.toHex().constData(), stamp, qPrintable(addr.toString()), port);
 	if (dmac == mac) return; // to myself
 	if (routes.contains(dmac)) {
 		if (routes.value(dmac).stamp >= stamp) return;
@@ -312,6 +323,18 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 	s.stamp = stamp;
 	routes.insert(dmac, s);
 	broadcast(pkt);
+
+	// also insert into db
+	QSqlQuery q(db);
+	QString final_mac = dmac.toHex();
+	final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
+	q.prepare("INSERT OR REPLACE INTO peer_info (mac, peer_ip, peer_port) VALUES (:mac, :addr, :port)");
+	q.bindValue(":mac", final_mac);
+	q.bindValue(":addr", addr.toString());
+	q.bindValue(":port", port);
+	if (!q.exec()) {
+		qDebug("query failed :( %s", qPrintable(q.lastError().text()));
+	}
 }
 
 void InVpn::routeBroadcast(const QByteArray &pkt) {

@@ -52,7 +52,7 @@ void InVpnNode::handlePacket(const QByteArray&pkt) {
 			{
 				QByteArray new_pkt;
 				new_pkt.append((char)0x01);
-				new_pkt.append(pkt.mid(3));// version + id + mac
+				new_pkt.append(pkt.mid(3));// version + id + mac + port
 				QHostAddress h = link->peerAddress();
 				switch(h.protocol()) {
 					case QAbstractSocket::IPv4Protocol:
@@ -73,24 +73,39 @@ void InVpnNode::handlePacket(const QByteArray&pkt) {
 						new_pkt.append((char)0x00);
 						break;
 				}
-				// append port
-				quint16 port = qToBigEndian(link->peerPort());
-				new_pkt.append((char*)&port, 2);
 				// prepend length
 				quint16 len = new_pkt.size();
 				len = qToBigEndian(len);
 				new_pkt.prepend((char*)&len, 2);
 
 				qint64 stamp = qFromBigEndian(*(qint64*)pkt.mid(4, 8).constData());
+				quint16 port = qFromBigEndian(*(quint16*)(pkt.constData()+18));
 
-				parent->announcedRoute(pkt.mid(12, 6), this, stamp, new_pkt);
+				parent->announcedRoute(pkt.mid(12, 6), this, stamp, h, port, new_pkt);
 			}
 			break;
 		case 0x01:
 			// details on a remote node
 			{
 				qint64 stamp = qFromBigEndian(*(qint64*)pkt.mid(4, 8).constData());
-				parent->announcedRoute(pkt.mid(12, 6), this, stamp, pkt);
+				QHostAddress h;
+				quint16 port = qFromBigEndian(*(quint16*)(pkt.constData()+18));
+				int type = pkt.at(20);
+				switch(type) {
+					case 1:
+						{
+							quint32 ip = qFromBigEndian(*(quint32*)(pkt.constData()+21));
+							h.setAddress(ip);
+						}
+						break;
+					case 2:
+						{
+							Q_IPV6ADDR ip = *(Q_IPV6ADDR*)(pkt.constData()+21);
+							h.setAddress(ip);
+						}
+						break;
+				}
+				parent->announcedRoute(pkt.mid(12, 6), this, stamp, h, port, pkt);
 			}
 			break;
 		case 0x80:

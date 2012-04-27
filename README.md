@@ -24,8 +24,8 @@ CA with Common Name set to the node's MAC address.
 Packet types
 ------------
 
-* 0: initial info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes MAC addr
-* 1: info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes mac, 1 byte type (ipv4/ipv6), n bytes ip, 2 bytes port
+* 0: initial info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes MAC addr, 2 bytes port
+* 1: info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes mac, 2 bytes port, 1 byte type (ipv4/ipv6), n bytes ip
 * 80: targetted packet. 6 bytes dst, 6 bytes src, data
 * 81: broadcast. 8 bytes id, 6 bytes src, data
 
