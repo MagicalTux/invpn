@@ -107,14 +107,21 @@ void InVpn::tryConnect() {
 	}
 	if (count >= 2) return;
 
-	if (init_seed.isNull()) {
-//		qDebug("no node to connect to, giving up");
-		return;
+	QSqlQuery r = db.exec("SELECT mac, peer_ip, peer_port FROM peer_info ORDER BY RANDOM() LIMIT 2");
+	if (r.isSelect()) {
+		while(r.next()) {
+			connectTo(r.value(0).toString(), QHostAddress(r.value(1).toString()), r.value(2).toInt());
+		}
 	}
 
 	// format is either: 127.0.0.1:1234 [::1]:1234
 	// Because of the way this works, placing an IPv6 without brackets works too: ::1:1234
 	// IPv4 with brackets works too: [127.0.0.1]:1234
+	if (init_seed.isNull()) {
+//		qDebug("no node to connect to, giving up");
+		return;
+	}
+
 	
 	int pos = init_seed.indexOf('@');
 	if (pos == -1) {
@@ -309,7 +316,7 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 }
 
 void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QHostAddress &addr, quint16 port, const QByteArray &pkt) {
-	qDebug("got route to %s stamp %lld, connectable via %s port %d", dmac.toHex().constData(), stamp, qPrintable(addr.toString()), port);
+//	qDebug("got route to %s stamp %lld, connectable via %s port %d", dmac.toHex().constData(), stamp, qPrintable(addr.toString()), port);
 	if (dmac == mac) return; // to myself
 	if (routes.contains(dmac)) {
 		if (routes.value(dmac).stamp >= stamp) return;
