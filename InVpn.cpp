@@ -77,13 +77,77 @@ InVpn::InVpn() {
 
 	connect(server, SIGNAL(ready(QSslSocket*)), this, SLOT(accept(QSslSocket*)));
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
-	connect(&check, SIGNAL(timeout()), this, SLOT(announce()));
+	connect(&announce_timer, SIGNAL(timeout()), this, SLOT(announce()));
+	connect(&connect_timer, SIGNAL(timeout()), this, SLOT(tryConnect()));
 
-	check.setInterval(10000);
-	check.setSingleShot(false);
-	check.start();
+	announce_timer.setInterval(10000);
+	announce_timer.setSingleShot(false);
+	announce_timer.start();
+	connect_timer.setInterval(60000);
+	connect_timer.setSingleShot(false);
+	connect_timer.start();
 
 	qDebug("got interface: %s", qPrintable(tap->getName()));
+
+	tryConnect(); // try to connect to stuff now
+}
+
+void InVpn::tryConnect() {
+	// we want at least two links established, let's count now!
+	int count = 0;
+
+	auto i = nodes.begin();
+	while(i != nodes.end()) {
+		if (i.value()->isLinked()) count++;
+		i++;
+	}
+	if (count >= 2) return;
+
+	if (init_seed.isNull()) {
+//		qDebug("no node to connect to, giving up");
+		return;
+	}
+
+	// format is either: 127.0.0.1:1234 [::1]:1234
+	// Because of the way this works, placing an IPv6 without brackets works too: ::1:1234
+	// IPv4 with brackets works too: [127.0.0.1]:1234
+	
+	int pos = init_seed.indexOf('@');
+	if (pos == -1) {
+		qDebug("Bad syntax for initial seed, giving up");
+		return;
+	}
+	QString rmac = init_seed.mid(0, pos);
+	QString addr = init_seed.mid(pos+1);
+
+	pos = addr.lastIndexOf(':');
+	if (pos == -1) {
+		qDebug("port missing, giving up");
+		return;
+	}
+
+	int port = addr.mid(pos+1).toInt();
+	QString tip = addr.mid(0, pos);
+
+	if ((tip[0] == '[') && (tip.at(tip.size()-1) == ']')) {
+		tip = tip.mid(1, tip.size()-2);
+	}
+	QHostAddress ip(tip);
+	if (ip.isNull()) {
+		qDebug("malformed initial seed ip, giving up");
+		return;
+	}
+
+	qDebug("trying to connect to %s on port %d", qPrintable(ip.toString()), port);
+
+	QSslSocket *s = new QSslSocket(this);
+	connect(s, SIGNAL(connected()), s, SLOT(startClientEncryption()));
+	connect(s, SIGNAL(sslErrors(const QList<QSslError>&)), this, SLOT(sslErrors(const QList<QSslError>&)));
+	connect(s, SIGNAL(encrypted()), this, SLOT(socketReady()));
+	connect(s, SIGNAL(disconnected()), this, SLOT(socketLost()));
+	connect(s, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(socketError(QAbstractSocket::SocketError)));
+	s->connectToHost(ip, port);
+	s->setPeerVerifyName(rmac);
 }
 
 void InVpn::announce() {
@@ -120,6 +184,7 @@ void InVpn::accept(QSslSocket*s) {
 	connect(s, SIGNAL(sslErrors(const QList<QSslError>&)), this, SLOT(sslErrors(const QList<QSslError>&)));
 	connect(s, SIGNAL(disconnected()), this, SLOT(socketLost()));
 	connect(s, SIGNAL(encrypted()), this, SLOT(socketReady()));
+	connect(s, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(socketError(QAbstractSocket::SocketError)));
 	s->startServerEncryption();
 }
 
@@ -144,12 +209,21 @@ void InVpn::socketReady() {
 	QString tmpmac = p.subjectInfo(QSslCertificate::CommonName); // xx:xx:xx:xx:xx:xx
 	QByteArray m = QByteArray::fromHex(tmpmac.toLatin1().replace(":",""));
 
+	if (m == mac) {
+		// connected to myself?!
+		qDebug("connected to self, closing");
+		s->disconnect();
+		s->deleteLater();
+	}
+
 	// do we know this node ?
 	if (!nodes.contains(m)) {
 		nodes.insert(m, new InVpnNode(this, m));
 		connect(this, SIGNAL(broadcast(const QByteArray&)), nodes.value(m), SLOT(push(const QByteArray&)));
 	}
 	if (!nodes.value(m)->setLink(s)) {
+		// already got a link to that node?
+		qDebug("already got a link to this guy, closing it");
 		s->disconnect();
 		s->deleteLater();
 	}
@@ -166,6 +240,14 @@ void InVpn::socketLost() {
 	s->deleteLater();
 }
 
+void InVpn::socketError(QAbstractSocket::SocketError) {
+	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
+	if (!s) return;
+
+	qDebug("error from socket: %s", qPrintable(s->errorString()));
+	s->deleteLater();
+}
+
 bool InVpn::isValid() {
 	if (tap == NULL) return false;
 	return true;
@@ -176,7 +258,68 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 		qDebug("dropped packet from wrong mac addr");
 		return;
 	}
-	qDebug("packet data: [%s] => [%s] %s", src_hw.toHex().constData(), dst_hw.toHex().constData(), data.toHex().constData());
+//	qDebug("packet data: [%s] => [%s] %s", src_hw.toHex().constData(), dst_hw.toHex().constData(), data.toHex().constData());
+
+	if (dst_hw == QByteArray(6, '\xff')) {
+		// broadcast!
+		QByteArray pkt;
+
+		qint64 ts = qToBigEndian(broadcastId());
+
+		pkt.append((char*)&ts, 8);
+		pkt.append(src_hw);
+		pkt.append(data);
+
+		pkt.prepend((char)0x81); // broadcast
+		quint16 len = pkt.size();
+		len = qToBigEndian(len);
+		pkt.prepend((char*)&len, 2);
+
+		qDebug("broadcast: %s", pkt.toHex().constData());
+		broadcast(pkt);
+		return;
+	}
+	if (!routes.contains(dst_hw)) {
+		qDebug("Packet to unroutable mac addr %s ignored", dst_hw.toHex().constData());
+		return;
+	}
+
+	QByteArray pkt;
+	pkt.append(dst_hw);
+	pkt.append(src_hw);
+	pkt.append(data);
+
+	pkt.prepend((char)0x80); // targetted
+	quint16 len = pkt.size();
+	len = qToBigEndian(len);
+	pkt.prepend((char*)&len, 2);
+
+	route(pkt);
+//	nodes.value(dst_hw).push(pkt);
+}
+
+void InVpn::announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt) {
+	if (routes.contains(mac)) {
+		if (routes.value(mac).stamp >= stamp) return;
+		routes[mac].stamp = stamp;
+		routes[mac].peer = peer;
+		broadcast(pkt);
+		return;
+	}
+	struct invpn_route_info s;
+	s.peer = peer;
+	s.stamp = stamp;
+	routes.insert(mac, s);
+	broadcast(pkt);
+}
+
+void InVpn::route(const QByteArray &pkt) {
+	if ((unsigned char)pkt.at(2) != 0x80) return; // not a directed packet
+	QByteArray dst_mac = pkt.mid(3, 6);
+	qDebug("route pkt to %s", dst_mac.toHex().constData());
+	if (!routes.contains(dst_mac)) return;
+	if (!routes.value(dst_mac).peer) return;
+	routes.value(dst_mac).peer->push(pkt);
 }
 
 void InVpn::parseCmdLine() {

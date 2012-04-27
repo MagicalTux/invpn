@@ -9,6 +9,7 @@ public:
 	InVpnNode(InVpn *parent, const QByteArray &mac);
 
 	bool setLink(QSslSocket*);
+	bool isLinked() const;
 
 public slots:
 	void push(const QByteArray&msg);

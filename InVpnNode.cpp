@@ -10,11 +10,17 @@ InVpnNode::InVpnNode(InVpn *_parent, const QByteArray &_mac): QObject(_parent) {
 bool InVpnNode::setLink(QSslSocket *_link) {
 	if (link != NULL) return false;
 	link = _link;
-	// TODO connect stuff
+	connect(link, SIGNAL(disconnected()), this, SLOT(socketLost()));
+	connect(link, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(socketError(QAbstractSocket::SocketError)));
 	return true;
+}
+
+bool InVpnNode::isLinked() const {
+	return (link != NULL);
 }
 
 void InVpnNode::push(const QByteArray&msg) {
 	if (link == NULL) return;
 	link->write(msg);
 }
+

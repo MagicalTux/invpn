@@ -4,10 +4,16 @@
 #include <QSslCertificate>
 #include <QSslSocket>
 #include <QTimer>
+#include <QPointer>
 #include "QTap.hpp"
 #include "InVpnSslServer.hpp"
 
 class InVpnNode;
+
+struct invpn_route_info {
+	qint64 stamp;
+	QPointer<InVpnNode> peer;
+};
 
 class InVpn: public QObject {
 	Q_OBJECT;
@@ -22,8 +28,13 @@ public slots:
 	void sslErrors(const QList<QSslError>&);
 	void socketReady();
 	void socketLost();
+	void socketError(QAbstractSocket::SocketError);
 
 	void announce();
+	void tryConnect();
+	void announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt);
+
+	void route(const QByteArray&); // route a 0x80 packet to appropriate node
 
 signals:
 	void broadcast(const QByteArray&);
@@ -36,6 +47,7 @@ private:
 	qint64 bc_last_id;
 
 	QMap<QByteArray, InVpnNode*> nodes;
+	QMap<QByteArray, struct invpn_route_info> routes;
 
 	QSqlDatabase db;
 
@@ -45,7 +57,8 @@ private:
 
 	QByteArray mac;
 
-	QTimer check;
+	QTimer announce_timer;
+	QTimer connect_timer;
 
 	// settings
 	void parseCmdLine();
