@@ -16,6 +16,9 @@ bool InVpnNode::setLink(QSslSocket *_link) {
 	connect(link, SIGNAL(disconnected()), this, SLOT(socketLost()));
 	connect(link, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(socketError(QAbstractSocket::SocketError)));
 	connect(link, SIGNAL(readyRead()), this, SLOT(socketRead()));
+
+	link->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+	link->setSocketOption(QAbstractSocket::KeepAliveOption, 1);
 	return true;
 }
 
