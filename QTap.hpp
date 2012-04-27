@@ -14,6 +14,7 @@ public:
 
 public slots:
 	void activity(int);
+	void write(const QByteArray&);
 
 signals:
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);

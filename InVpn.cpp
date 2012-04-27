@@ -165,7 +165,6 @@ void InVpn::announce() {
 	len = qToBigEndian(len);
 	pkt.prepend((char*)&len, 2);
 
-	qDebug("broadcast: %s", pkt.toHex().constData());
 	broadcast(pkt);
 }
 
@@ -275,7 +274,7 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 		len = qToBigEndian(len);
 		pkt.prepend((char*)&len, 2);
 
-		qDebug("broadcast: %s", pkt.toHex().constData());
+//		qDebug("broadcast: %s", pkt.toHex().constData());
 		broadcast(pkt);
 		return;
 	}
@@ -298,24 +297,50 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 //	nodes.value(dst_hw).push(pkt);
 }
 
-void InVpn::announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt) {
-	if (routes.contains(mac)) {
-		if (routes.value(mac).stamp >= stamp) return;
-		routes[mac].stamp = stamp;
-		routes[mac].peer = peer;
+void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt) {
+//	qDebug("got route to %s stamp %lld", dmac.toHex().constData(), stamp);
+	if (dmac == mac) return; // to myself
+	if (routes.contains(dmac)) {
+		if (routes.value(dmac).stamp >= stamp) return;
+		routes[dmac].stamp = stamp;
+		routes[dmac].peer = peer;
 		broadcast(pkt);
 		return;
 	}
 	struct invpn_route_info s;
 	s.peer = peer;
 	s.stamp = stamp;
-	routes.insert(mac, s);
+	routes.insert(dmac, s);
+	broadcast(pkt);
+}
+
+void InVpn::routeBroadcast(const QByteArray &pkt) {
+	if ((unsigned char)pkt.at(2) != 0x81) return; // not a broadcast packet
+	QByteArray src_mac = pkt.mid(11, 6);
+	if (src_mac == mac) return;
+
+	if (!nodes.contains(src_mac)) return;
+
+	qint64 stamp = qFromBigEndian(*(qint64*)pkt.mid(3, 8).constData());
+
+	if (!nodes.value(src_mac)->checkStamp(stamp)) return;
+
+	QByteArray tap_pkt(6, '\xff');
+	tap_pkt.append(pkt.mid(11));
+
+	tap->write(tap_pkt);
 	broadcast(pkt);
 }
 
 void InVpn::route(const QByteArray &pkt) {
 	if ((unsigned char)pkt.at(2) != 0x80) return; // not a directed packet
 	QByteArray dst_mac = pkt.mid(3, 6);
+	if (dst_mac == mac) {
+		// that's actually a packet for us
+		tap->write(pkt.mid(9));
+		return;
+	}
+
 	qDebug("route pkt to %s", dst_mac.toHex().constData());
 	if (!routes.contains(dst_mac)) return;
 	if (!routes.value(dst_mac).peer) return;

@@ -35,6 +35,7 @@ public slots:
 	void announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QByteArray &pkt);
 
 	void route(const QByteArray&); // route a 0x80 packet to appropriate node
+	void routeBroadcast(const QByteArray&); // route a 0x8& packet to appropriate nodes
 
 signals:
 	void broadcast(const QByteArray&);

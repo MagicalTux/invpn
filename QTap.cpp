@@ -90,3 +90,13 @@ void QTap::setMac(const QByteArray &mac) {
 	close(s);
 }
 
+void QTap::write(const QByteArray &dat) {
+	if (tap_fd <= 0) return;
+	QByteArray cp(4, '\x00');
+	cp.append(dat);
+	int res = ::write(tap_fd, cp.constData(), cp.size());
+	if (res != cp.size()) {
+		qDebug("QTap::write: failed to write");
+	}
+}
+
