@@ -297,7 +297,7 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 		return;
 	}
 	if (!routes.contains(dst_hw)) {
-		qDebug("Packet to unroutable mac addr %s ignored", dst_hw.toHex().constData());
+//		qDebug("Packet to unroutable mac addr %s ignored", dst_hw.toHex().constData());
 		return;
 	}
 
@@ -367,11 +367,11 @@ void InVpn::route(const QByteArray &pkt) {
 	QByteArray dst_mac = pkt.mid(3, 6);
 	if (dst_mac == mac) {
 		// that's actually a packet for us
-		tap->write(pkt.mid(9));
+		tap->write(pkt.mid(3));
 		return;
 	}
 
-	qDebug("route pkt to %s", dst_mac.toHex().constData());
+//	qDebug("route pkt to %s", dst_mac.toHex().constData());
 	if (!routes.contains(dst_mac)) return;
 	if (!routes.value(dst_mac).peer) return;
 	routes.value(dst_mac).peer->push(pkt);
