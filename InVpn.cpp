@@ -403,6 +403,7 @@ void InVpn::reloadSettings() {
 	settings->endGroup();
 	settings->beginGroup("network");
 	port = settings->value("port", port).toInt();
+	init_seed = settings->value("init").toString();
 	QString new_cache_file = settings->value("cache", cache_file).toString();
 	settings->endGroup();
 	if (new_cache_file != cache_file) {
