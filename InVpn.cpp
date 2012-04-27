@@ -5,13 +5,14 @@
 #include <QFile>
 #include <QSslConfiguration>
 #include <QDateTime>
-#include <QSqlQuery>
-#include <QSqlError>
 #include <qendian.h>
 
 InVpn::InVpn() {
 	tap = NULL;
+	settings = NULL;
+	cache = NULL;
 	bc_last_id = 0;
+
 	parseCmdLine();
 
 	// initialize SSL
@@ -41,17 +42,6 @@ InVpn::InVpn() {
 		QCoreApplication::exit(1);
 		return;
 	}
-
-	// initialize DB
-	db = QSqlDatabase::addDatabase("QSQLITE");
-	db.setDatabaseName(db_path);
-	if (!db.open()) {
-		qDebug("Could not open database");
-		QCoreApplication::exit(1);
-		return;
-	}
-
-	db.exec("CREATE TABLE IF NOT EXISTS peer_info (mac CHAR(17) UNIQUE, peer_ip VARCHAR(37), peer_port INT)");
 
 	// Set CA list for all future configs
 	QSslConfiguration config = QSslConfiguration::defaultConfiguration();
@@ -107,11 +97,16 @@ void InVpn::tryConnect() {
 	}
 	if (count >= 2) return;
 
-	QSqlQuery r = db.exec("SELECT mac, peer_ip, peer_port FROM peer_info ORDER BY RANDOM() LIMIT 2");
-	if (r.isSelect()) {
-		while(r.next()) {
-			connectTo(r.value(0).toString(), QHostAddress(r.value(1).toString()), r.value(2).toInt());
-		}
+	QStringList keys = cache->allKeys();
+	while((keys.size() > 0) && (count < 2)) {
+		// take a random key
+		QString k = keys.takeAt(qrand() % keys.size());
+		// check if already connected
+		QByteArray m = QByteArray::fromHex(k.toLatin1().replace(":",""));
+		if ((nodes.contains(m)) && (nodes.value(m)->isLinked())) continue;
+
+		QVariantList v = cache->value(k).toList();
+		connectTo(k, QHostAddress(v.at(0).toString()), v.at(1).toInt());
 	}
 
 	// format is either: 127.0.0.1:1234 [::1]:1234
@@ -188,7 +183,7 @@ void InVpn::announce() {
 
 qint64 InVpn::broadcastId() {
 	// return a milliseconds unique timestamp, let's hope we won't have a sustained 1000 pkt/sec of broadcast
-	qint64 now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+	qint64 now = QDateTime::currentMSecsSinceEpoch();
 	if (now <= bc_last_id) {
 		bc_last_id++;
 		return bc_last_id;
@@ -336,16 +331,9 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 	broadcast(pkt);
 
 	// also insert into db
-	QSqlQuery q(db);
 	QString final_mac = dmac.toHex();
 	final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
-	q.prepare("INSERT OR REPLACE INTO peer_info (mac, peer_ip, peer_port) VALUES (:mac, :addr, :port)");
-	q.bindValue(":mac", final_mac);
-	q.bindValue(":addr", addr.toString());
-	q.bindValue(":port", port);
-	if (!q.exec()) {
-		qDebug("query failed :( %s", qPrintable(q.lastError().text()));
-	}
+	cache->setValue(final_mac, QVariantList() << addr.toString() << port);
 }
 
 void InVpn::routeBroadcast(const QByteArray &pkt) {
@@ -383,36 +371,45 @@ void InVpn::route(const QByteArray &pkt) {
 
 void InVpn::parseCmdLine() {
 	// set default settings, then try to parse cmdline
+	config_file = "conf/invpn.conf";
+	cache_file = "conf/invpn.cache";
 	port = 41744;
 	key_path = "conf/client.key";
 	cert_path = "conf/client.crt";
 	ca_path = "conf/ca.crt";
-	db_path = "conf/client.db";
 
 	QStringList cmdline = QCoreApplication::arguments();
 
 	// Why isn't there a cmdline parser included with Qt? ;_;
 	for(int i = 1; i < cmdline.size(); i++) {
 		QString tmp = cmdline.at(i);
-		if (tmp == "-k") {
-			key_path = cmdline.at(i+1); i++; continue;
-		}
-		if (tmp == "-c") {
-			cert_path = cmdline.at(i+1); i++; continue;
-		}
-		if (tmp == "-a") {
-			ca_path = cmdline.at(i+1); i++; continue;
-		}
-		if (tmp == "-s") {
-			db_path = cmdline.at(i+1); i++; continue;
-		}
-		if (tmp == "-p") {
-			port = cmdline.at(i+1).toInt(); i++; continue;
-		}
-		if (tmp == "-t") {
-			init_seed = cmdline.at(i+1); i++; continue;
+		if ((tmp == "-c") && (cmdline.size() > i+1)) {
+			config_file = cmdline.at(i+1); i++; continue;
 		}
 		// ignore unrecognized args
+	}
+
+	settings = new QSettings(config_file, QSettings::IniFormat, this);
+	cache = new QSettings(cache_file, QSettings::IniFormat, this);
+
+	reloadSettings();
+}
+
+void InVpn::reloadSettings() {
+	settings->beginGroup("ssl");
+	key_path = settings->value("key", key_path).toString();
+	cert_path = settings->value("cert", cert_path).toString();
+	ca_path = settings->value("ca", ca_path).toString();
+	settings->endGroup();
+	settings->beginGroup("network");
+	port = settings->value("port", port).toInt();
+	QString new_cache_file = settings->value("cache", cache_file).toString();
+	settings->endGroup();
+	if (new_cache_file != cache_file) {
+		cache->sync();
+		delete cache;
+		cache_file = new_cache_file;
+		cache = new QSettings(cache_file, QSettings::IniFormat, this);
 	}
 }
 

@@ -1,10 +1,10 @@
 #include <QObject>
-#include <QSqlDatabase>
 #include <QSslKey>
 #include <QSslCertificate>
 #include <QSslSocket>
 #include <QTimer>
 #include <QPointer>
+#include <QSettings>
 #include "QTap.hpp"
 #include "InVpnSslServer.hpp"
 
@@ -23,6 +23,8 @@ public:
 	void connectTo(const QString &id, const QHostAddress &addr, quint16 port);
 
 public slots:
+	void reloadSettings();
+
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);
 	bool isValid();
 	void accept(QSslSocket*);
@@ -52,8 +54,6 @@ private:
 	QMap<QByteArray, InVpnNode*> nodes;
 	QMap<QByteArray, struct invpn_route_info> routes;
 
-	QSqlDatabase db;
-
 	QSslKey ssl_key;
 	QSslCertificate ssl_cert;
 	QList<QSslCertificate> ssl_ca;
@@ -64,6 +64,8 @@ private:
 	QTimer connect_timer;
 
 	// settings
+	QString config_file;
+	QString cache_file;
 	void parseCmdLine();
 	QString key_path;
 	QString cert_path;
@@ -71,6 +73,9 @@ private:
 	QString db_path;
 	QString init_seed; // initial peer if none found
 	int port;
+
+	QSettings *settings;
+	QSettings *cache;
 };
 
 // helper
