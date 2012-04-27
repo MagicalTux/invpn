@@ -84,7 +84,7 @@ InVpn::InVpn() {
 	connect(&announce_timer, SIGNAL(timeout()), this, SLOT(announce()));
 	connect(&connect_timer, SIGNAL(timeout()), this, SLOT(tryConnect()));
 
-	announce_timer.setInterval(10000);
+	announce_timer.setInterval(5000);
 	announce_timer.setSingleShot(false);
 	announce_timer.start();
 	connect_timer.setInterval(60000);
