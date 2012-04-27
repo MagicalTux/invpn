@@ -20,7 +20,7 @@ bool InVpnNode::setLink(QSslSocket *_link) {
 }
 
 bool InVpnNode::checkStamp(qint64 id) {
-	if (last_bcast >= id) return false;
+	if (id <= last_bcast) return false;
 	last_bcast = id;
 	return true;
 }

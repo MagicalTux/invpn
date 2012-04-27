@@ -318,6 +318,10 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QHostAddress &addr, quint16 port, const QByteArray &pkt) {
 //	qDebug("got route to %s stamp %lld, connectable via %s port %d", dmac.toHex().constData(), stamp, qPrintable(addr.toString()), port);
 	if (dmac == mac) return; // to myself
+	if (!nodes.contains(dmac)) {
+		nodes.insert(dmac, new InVpnNode(this, dmac));
+		connect(this, SIGNAL(broadcast(const QByteArray&)), nodes.value(dmac), SLOT(push(const QByteArray&)));
+	}
 	if (routes.contains(dmac)) {
 		if (routes.value(dmac).stamp >= stamp) return;
 		routes[dmac].stamp = stamp;
