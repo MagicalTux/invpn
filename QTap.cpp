@@ -21,7 +21,7 @@ struct tap_packet {
 	} data;
 } __attribute__((packed));
 
-QTap::QTap(const QString &pref_name, QObject *parent): QObject(parent) {
+QTap::QTap(const QString &pref_name, const QByteArray &mac, QObject *parent): QObject(parent) {
 	struct ifreq ifr;
 
 	tap_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
@@ -48,6 +48,9 @@ QTap::QTap(const QString &pref_name, QObject *parent): QObject(parent) {
 	name = QString::fromLatin1(ifr.ifr_name);
 	notifier = new QSocketNotifier(tap_fd, QSocketNotifier::Read, this);
 	connect(notifier, SIGNAL(activated(int)), this, SLOT(activity(int)));
+
+	if (!mac.isEmpty())
+		setMac(mac);
 }
 
 bool QTap::isValid() const {
@@ -74,20 +77,16 @@ void QTap::activity(int fd) {
 void QTap::setMac(const QByteArray &mac) {
 	if (tap_fd <= 0) return;
 
-	int s;
 	struct ifreq ifhw;
 
-	s = socket(PF_INET, SOCK_DGRAM, 0);
 	memset(&ifhw, 0, sizeof(ifhw));
 	strncpy(ifhw.ifr_name, name.toLatin1().constData(), IFNAMSIZ);
 	ifhw.ifr_hwaddr.sa_family = ARPHRD_ETHER;
 	memcpy(&ifhw.ifr_hwaddr.sa_data, mac.constData(), ETH_ALEN);
-	if (ioctl(s, SIOCSIFHWADDR, (void*) &ifhw) < 0) {
+	if (ioctl(tap_fd, SIOCSIFHWADDR, (void*) &ifhw) < 0) {
 		qDebug("SIOCSIFHWADDR failed");
-		close(s);
 		return;
 	}
-	close(s);
 }
 
 void QTap::write(const QByteArray &dat) {

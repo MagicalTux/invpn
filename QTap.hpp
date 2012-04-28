@@ -6,7 +6,7 @@
 class QTap: public QObject {
 	Q_OBJECT;
 public:
-	QTap(const QString &pref_name = QString(), QObject *parent = 0);
+	QTap(const QString &pref_name = QString(), const QByteArray &mac = QByteArray(), QObject *parent = 0);
 
 	bool isValid() const;
 	const QString &getName() const;

@@ -61,13 +61,12 @@ InVpn::InVpn() {
 		return;
 	}
 
-	tap = new QTap("invpn%d", this);
+	tap = new QTap("invpn%d", mac, this);
 	if (!tap->isValid()) {
 		delete tap;
 		tap = NULL;
 		return;
 	}
-	tap->setMac(mac);
 
 	connect(server, SIGNAL(ready(QSslSocket*)), this, SLOT(accept(QSslSocket*)));
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
