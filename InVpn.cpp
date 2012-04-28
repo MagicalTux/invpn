@@ -241,6 +241,8 @@ void InVpn::socketReady() {
 		s->disconnect();
 		s->deleteLater();
 	}
+
+	announce(); // send announces now to update our routes
 }
 
 void InVpn::socketLost() {
