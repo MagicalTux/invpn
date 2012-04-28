@@ -1,0 +1,14 @@
+v0.2
+	* Enable TCP_NOWAIT on socket
+	* Sending broadcast announce immediately after each connection
+	established
+	* Program will restart on SIGUSR2 while keeping the interface up
+	* Not creating a UDP socket anymore to change MAC addr
+	* Switched configuration from cmdline to ini file
+	* Switched cache from SQLite3 to ini file
+
+v0.1
+	* Cache is stored in a SQLite database
+	* Configuration is done on commandline
+	* System can interconnect and route packets
+	* Initial code
