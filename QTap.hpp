@@ -6,10 +6,12 @@
 class QTap: public QObject {
 	Q_OBJECT;
 public:
-	QTap(const QString &pref_name = QString(), const QByteArray &mac = QByteArray(), QObject *parent = 0);
+	QTap(const QString &pref_name = QString(), const QByteArray &mac = QByteArray(), QObject *parent = 0, int resume = -1);
 
 	bool isValid() const;
 	const QString &getName() const;
+	int getFd() const;
+
 	void setMac(const QByteArray &mac);
 
 public slots:

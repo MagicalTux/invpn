@@ -25,6 +25,9 @@ public:
 public slots:
 	void reloadSettings();
 
+	void quit();
+	void restart();
+
 	void packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QByteArray &data);
 	bool isValid();
 	void accept(QSslSocket*);
@@ -73,6 +76,7 @@ private:
 	QString db_path;
 	QString init_seed; // initial peer if none found
 	int port;
+	int tap_fd_restore;
 
 	QSettings *settings;
 	QSettings *cache;

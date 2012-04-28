@@ -21,31 +21,45 @@ struct tap_packet {
 	} data;
 } __attribute__((packed));
 
-QTap::QTap(const QString &pref_name, const QByteArray &mac, QObject *parent): QObject(parent) {
+QTap::QTap(const QString &pref_name, const QByteArray &mac, QObject *parent, int resume): QObject(parent) {
 	struct ifreq ifr;
 
-	tap_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
+	tap_fd = -1;
 
-	if (tap_fd < 0) {
-		qDebug("failed to open tun port, make sure module is loaded and you can access it");
-		return;
+	if (resume > 0) {
+		// already got a fd? make sure it is a valid tap
+		if (ioctl(resume, TUNGETIFF, (void*)&ifr) == 0) {
+			// oh oh ?
+			tap_fd = resume;
+			name = QString::fromLatin1(ifr.ifr_name);
+		}
 	}
 
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_flags = IFF_TAP;
+	if (tap_fd == -1) {
+		tap_fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
 
-	if (!pref_name.isEmpty()) {
-		strncpy(ifr.ifr_name, pref_name.toLatin1().constData(), IFNAMSIZ);
+		if (tap_fd < 0) {
+			qDebug("failed to open tun port, make sure module is loaded and you can access it");
+			return;
+		}
+
+		memset(&ifr, 0, sizeof(ifr));
+		ifr.ifr_flags = IFF_TAP;
+
+		if (!pref_name.isEmpty()) {
+			strncpy(ifr.ifr_name, pref_name.toLatin1().constData(), IFNAMSIZ);
+		}
+
+		if (ioctl(tap_fd, TUNSETIFF, (void *) &ifr) < 0) {
+			qDebug("tap: unable to set tunnel. Make sure you have the appropriate privileges");
+			close(tap_fd);
+			tap_fd = -1;
+			return;
+		}
+
+		name = QString::fromLatin1(ifr.ifr_name);
 	}
 
-	if (ioctl(tap_fd, TUNSETIFF, (void *) &ifr) < 0) {
-		qDebug("tap: unable to set tunnel. Make sure you have the appropriate privileges");
-		close(tap_fd);
-		tap_fd = -1;
-		return;
-	}
-
-	name = QString::fromLatin1(ifr.ifr_name);
 	notifier = new QSocketNotifier(tap_fd, QSocketNotifier::Read, this);
 	connect(notifier, SIGNAL(activated(int)), this, SLOT(activity(int)));
 
@@ -59,6 +73,10 @@ bool QTap::isValid() const {
 
 const QString &QTap::getName() const {
 	return name;
+}
+
+int QTap::getFd() const {
+	return tap_fd;
 }
 
 void QTap::activity(int fd) {

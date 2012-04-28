@@ -6,9 +6,12 @@
 #include <QSslConfiguration>
 #include <QDateTime>
 #include <qendian.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 InVpn::InVpn() {
 	tap = NULL;
+	tap_fd_restore = -1;
 	settings = NULL;
 	cache = NULL;
 	bc_last_id = 0;
@@ -61,7 +64,7 @@ InVpn::InVpn() {
 		return;
 	}
 
-	tap = new QTap("invpn%d", mac, this);
+	tap = new QTap("invpn%d", mac, this, tap_fd_restore);
 	if (!tap->isValid()) {
 		delete tap;
 		tap = NULL;
@@ -385,6 +388,9 @@ void InVpn::parseCmdLine() {
 		if ((tmp == "-c") && (cmdline.size() > i+1)) {
 			config_file = cmdline.at(i+1); i++; continue;
 		}
+		if ((tmp == "--tunfd") && (cmdline.size() > i+1)) {
+			tap_fd_restore = cmdline.at(i+1).toInt(); i++; continue;
+		}
 		// ignore unrecognized args
 	}
 
@@ -411,5 +417,21 @@ void InVpn::reloadSettings() {
 		cache_file = new_cache_file;
 		cache = new QSettings(cache_file, QSettings::IniFormat, this);
 	}
+}
+
+void InVpn::quit() {
+	qDebug("clean quit");
+	QCoreApplication::quit();
+}
+
+void InVpn::restart() {
+	qDebug("restart invpn!");
+	int fd = tap->getFd();
+	qDebug("TAP @ %d", fd);
+	fcntl(fd, F_SETFD, 0); // ensure FD_CLOEXEC is not set
+	char* const targv[] = { strdup(QCoreApplication::applicationFilePath().toLatin1().constData()), strdup("-c"), strdup(config_file.toLatin1().constData()), strdup("--tunfd"), strdup(QByteArray::number(fd).constData()), NULL };
+	execve(targv[0], targv, environ);
+	perror("execve");
+	qDebug("exec failed");
 }
 
