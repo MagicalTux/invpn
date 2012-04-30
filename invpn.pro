@@ -11,6 +11,9 @@ QT += network
 
 QMAKE_CXXFLAGS += -std=gnu++0x
 
+target.path = /usr/bin
+INSTALLS += target
+
 # Input
 HEADERS += QTap.hpp InVpn.hpp InVpnSslServer.hpp InVpnNode.hpp
 SOURCES += main.cpp QTap.cpp InVpn.cpp InVpnSslServer.cpp InVpnNode.cpp
