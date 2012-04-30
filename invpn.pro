@@ -11,7 +11,7 @@ QT += network
 
 QMAKE_CXXFLAGS += -std=gnu++0x
 
-target.path = /usr/bin
+target.path = /usr/sbin
 INSTALLS += target
 
 # Input
