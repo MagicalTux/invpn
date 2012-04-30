@@ -19,7 +19,7 @@ InVpn::InVpn() {
 	parseCmdLine();
 
 	// initialize SSL
-	QFile key_file(key_path);
+	QFile key_file(conf_key_path);
 	if (!key_file.open(QIODevice::ReadOnly)) {
 		qDebug("Could not open key file");
 		QCoreApplication::exit(1);
@@ -32,8 +32,8 @@ InVpn::InVpn() {
 		return;
 	}
 	key_file.close();
-	ssl_cert = QSslCertificate::fromPath(cert_path, QSsl::Pem, QRegExp::FixedString).at(0);
-	ssl_ca = QSslCertificate::fromPath(ca_path, QSsl::Pem);
+	ssl_cert = QSslCertificate::fromPath(conf_cert_path, QSsl::Pem, QRegExp::FixedString).at(0);
+	ssl_ca = QSslCertificate::fromPath(conf_ca_path, QSsl::Pem);
 
 	if (ssl_cert.isNull()) {
 		qDebug("failed to parse cert");
@@ -58,7 +58,7 @@ InVpn::InVpn() {
 	mac = QByteArray::fromHex(tmpmac.toLatin1().replace(":",""));
 
 	server = new InVpnSslServer();
-	if (!server->listen(QHostAddress::Any, port)) {
+	if (!server->listen(QHostAddress::Any, conf_port)) {
 		qDebug("failed to listen to net");
 		QCoreApplication::exit(1);
 		return;
@@ -114,19 +114,19 @@ void InVpn::tryConnect() {
 	// format is either: 127.0.0.1:1234 [::1]:1234
 	// Because of the way this works, placing an IPv6 without brackets works too: ::1:1234
 	// IPv4 with brackets works too: [127.0.0.1]:1234
-	if (init_seed.isNull()) {
+	if (conf_init_seed.isNull()) {
 //		qDebug("no node to connect to, giving up");
 		return;
 	}
 
 	
-	int pos = init_seed.indexOf('@');
+	int pos = conf_init_seed.indexOf('@');
 	if (pos == -1) {
 		qDebug("Bad syntax for initial seed, giving up");
 		return;
 	}
-	QString rmac = init_seed.mid(0, pos);
-	QString addr = init_seed.mid(pos+1);
+	QString rmac = conf_init_seed.mid(0, pos);
+	QString addr = conf_init_seed.mid(pos+1);
 
 	pos = addr.lastIndexOf(':');
 	if (pos == -1) {
@@ -171,11 +171,18 @@ void InVpn::announce() {
 	pkt.append((char)1); // version
 	pkt.append((char*)&ts, 8);
 	pkt.append(mac);
-	quint16 p = port;
+	quint16 p = conf_port;
 	p = qToBigEndian(p);
 	pkt.append((char*)&p, 2);
 
-	pkt.prepend((char)0);
+	if (conf_no_incoming) {
+		// we don't accept incoming connections (firewall, temporary node, etc), so don't broadcast an ip
+		pkt.append((char)0);
+		pkt.prepend((char)1); // version + include ip (type 0 = no ip)
+	} else {
+		pkt.prepend((char)0); // version + ask receipient to detect our ip
+	}
+
 	quint16 len = pkt.size();
 	len = qToBigEndian(len);
 	pkt.prepend((char*)&len, 2);
@@ -335,9 +342,11 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 	broadcast(pkt);
 
 	// also insert into db
-	QString final_mac = dmac.toHex();
-	final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
-	cache->setValue(final_mac, QVariantList() << addr.toString() << port);
+	if (!addr.isNull()) {
+		QString final_mac = dmac.toHex();
+		final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
+		cache->setValue(final_mac, QVariantList() << addr.toString() << port);
+	}
 }
 
 void InVpn::routeBroadcast(const QByteArray &pkt) {
@@ -376,11 +385,12 @@ void InVpn::route(const QByteArray &pkt) {
 void InVpn::parseCmdLine() {
 	// set default settings, then try to parse cmdline
 	config_file = "conf/invpn.conf";
-	cache_file = "conf/invpn.cache";
-	port = 41744;
-	key_path = "conf/client.key";
-	cert_path = "conf/client.crt";
-	ca_path = "conf/ca.crt";
+	conf_cache_file = "conf/invpn.cache";
+	conf_port = 41744;
+	conf_key_path = "conf/client.key";
+	conf_cert_path = "conf/client.crt";
+	conf_ca_path = "conf/ca.crt";
+	conf_no_incoming = false;
 
 	QStringList cmdline = QCoreApplication::arguments();
 
@@ -397,27 +407,28 @@ void InVpn::parseCmdLine() {
 	}
 
 	settings = new QSettings(config_file, QSettings::IniFormat, this);
-	cache = new QSettings(cache_file, QSettings::IniFormat, this);
+	cache = new QSettings(conf_cache_file, QSettings::IniFormat, this);
 
 	reloadSettings();
 }
 
 void InVpn::reloadSettings() {
 	settings->beginGroup("ssl");
-	key_path = settings->value("key", key_path).toString();
-	cert_path = settings->value("cert", cert_path).toString();
-	ca_path = settings->value("ca", ca_path).toString();
+	conf_key_path = settings->value("key", conf_key_path).toString();
+	conf_cert_path = settings->value("cert", conf_cert_path).toString();
+	conf_ca_path = settings->value("ca", conf_ca_path).toString();
 	settings->endGroup();
 	settings->beginGroup("network");
-	port = settings->value("port", port).toInt();
-	init_seed = settings->value("init").toString();
-	QString new_cache_file = settings->value("cache", cache_file).toString();
+	conf_port = settings->value("port", conf_port).toInt();
+	conf_no_incoming = settings->value("no_incoming", conf_no_incoming).toInt();
+	conf_init_seed = settings->value("init").toString();
+	QString new_cache_file = settings->value("cache", conf_cache_file).toString();
 	settings->endGroup();
-	if (new_cache_file != cache_file) {
+	if (new_cache_file != conf_cache_file) {
 		cache->sync();
 		delete cache;
-		cache_file = new_cache_file;
-		cache = new QSettings(cache_file, QSettings::IniFormat, this);
+		conf_cache_file = new_cache_file;
+		cache = new QSettings(conf_cache_file, QSettings::IniFormat, this);
 	}
 }
 

@@ -1,3 +1,11 @@
+v0.3
+	* Changed configuration variables name to add prefix conf_
+	* Support nodes without incoming connections
+
+v0.2.1
+	* Added limited make install support
+	* Added extra files for gentoo
+
 v0.2
 	* Enable TCP_NOWAIT on socket
 	* Sending broadcast announce immediately after each connection

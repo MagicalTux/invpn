@@ -68,15 +68,16 @@ private:
 
 	// settings
 	QString config_file;
-	QString cache_file;
 	void parseCmdLine();
-	QString key_path;
-	QString cert_path;
-	QString ca_path;
-	QString db_path;
-	QString init_seed; // initial peer if none found
-	int port;
+	QString conf_cache_file;
+	QString conf_key_path;
+	QString conf_cert_path;
+	QString conf_ca_path;
+	QString conf_db_path;
+	QString conf_init_seed; // initial peer if none found
+	int conf_port;
 	int tap_fd_restore;
+	bool conf_no_incoming;
 
 	QSettings *settings;
 	QSettings *cache;
