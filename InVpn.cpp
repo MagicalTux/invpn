@@ -75,13 +75,17 @@ InVpn::InVpn() {
 	connect(tap, SIGNAL(packet(const QByteArray&, const QByteArray&, const QByteArray&)), this, SLOT(packet(const QByteArray&, const QByteArray&, const QByteArray&)));
 	connect(&announce_timer, SIGNAL(timeout()), this, SLOT(announce()));
 	connect(&connect_timer, SIGNAL(timeout()), this, SLOT(tryConnect()));
+	connect(&route_timer, SIGNAL(timeout()), this, SLOT(cleanupRoutes()));
 
-	announce_timer.setInterval(5000);
+	announce_timer.setInterval(5000); // 5secs
 	announce_timer.setSingleShot(false);
 	announce_timer.start();
-	connect_timer.setInterval(60000);
+	connect_timer.setInterval(60000); // 1min
 	connect_timer.setSingleShot(false);
 	connect_timer.start();
+	route_timer.setInterval(300000); // 5min
+	route_timer.setSingleShot(false);
+	route_timer.start();
 
 	qDebug("got interface: %s", qPrintable(tap->getName()));
 
@@ -319,6 +323,21 @@ void InVpn::packet(const QByteArray &src_hw, const QByteArray &dst_hw, const QBy
 
 	route(pkt);
 //	nodes.value(dst_hw).push(pkt);
+}
+
+void InVpn::cleanupRoutes() {
+	// check routes, any "old" route (stamp older than 5min) is to be removed
+	// Since this func is called every 5 minutes, it means that old routes are purged after 5~10 minutes
+	qint64 expire = QDateTime::currentMSecsSinceEpoch() - 300000; // anything older than that is too old
+	auto i = routes.begin();
+
+	while(i != routes.end()) {
+		if (i.value().stamp < expire) {
+			i = routes.erase(i);
+			continue;
+		}
+		i++;
+	}
 }
 
 void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp, const QHostAddress &addr, quint16 port, const QByteArray &pkt) {

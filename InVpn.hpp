@@ -40,6 +40,7 @@ public slots:
 	void announce();
 	void tryConnect();
 	void announcedRoute(const QByteArray &mac, InVpnNode *peer, qint64 stamp, const QHostAddress&, quint16 port, const QByteArray &pkt);
+	void cleanupRoutes();
 
 	void route(const QByteArray&); // route a 0x80 packet to appropriate node
 	void routeBroadcast(const QByteArray&); // route a 0x8& packet to appropriate nodes
@@ -65,6 +66,7 @@ private:
 
 	QTimer announce_timer;
 	QTimer connect_timer;
+	QTimer route_timer;
 
 	// settings
 	QString config_file;
