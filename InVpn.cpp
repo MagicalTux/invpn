@@ -341,11 +341,16 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 	routes.insert(dmac, s);
 	broadcast(pkt);
 
-	// also insert into db
+	// also update db
+	QString final_mac = dmac.toHex();
+	final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
+
 	if (!addr.isNull()) {
-		QString final_mac = dmac.toHex();
-		final_mac = final_mac.insert(10,':').insert(8,':').insert(6,':').insert(4,':').insert(2,':');
+		// we got an address, store it
 		cache->setValue(final_mac, QVariantList() << addr.toString() << port);
+	} else {
+		// no address, make sure it's not in our cache
+		cache->remove(final_mac);
 	}
 }
 
