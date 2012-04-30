@@ -1,0 +1,69 @@
+#!/sbin/runscript
+# Copyright 1999-2007 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# 
+# Taken from openvpn and adapted
+
+extra_started_commands="reload"
+
+description_reload="Instruct invpn to restart itself without taking the interface down"
+
+VPNDIR=${VPNDIR:-/etc/invpn}
+VPN=${SVCNAME#*.}
+if [ -n "${VPN}" ] && [ ${SVCNAME} != "invpn" ]; then
+	VPNPID="/var/run/invpn.${VPN}.pid"
+else
+	VPNPID="/var/run/invpn.pid"
+fi
+VPNCONF="${VPNDIR}/${VPN}.conf"
+
+depend() {
+	need localmount net
+	use dns
+	after bootmisc
+}
+
+checkconfig() {
+	# Linux has good dynamic tun/tap creation
+	if [ $(uname -s) = "Linux" ] ; then
+		if [ ! -e /dev/net/tun ]; then
+			if ! modprobe tun ; then
+				eerror "TUN/TAP support is not available" \
+					"in this kernel"
+				return 1
+			fi
+		fi
+		if [ -h /dev/net/tun ] && [ -c /dev/misc/net/tun ]; then
+			ebegin "Detected broken /dev/net/tun symlink, fixing..."
+			rm -f /dev/net/tun
+			ln -s /dev/misc/net/tun /dev/net/tun
+			eend $?
+		fi
+		return 0
+	fi
+}
+
+start() {
+	ebegin "Starting ${SVCNAME}"
+
+	checkconfig || return 1
+
+	start-stop-daemon --start --exec /usr/bin/invpn --pidfile "${VPNPID}" \
+		--background --make-pidfile -- -c "${VPNCONF}"
+	eend $? "Check your logs to see why startup failed"
+}
+
+stop() {
+	ebegin "Stopping ${SVCNAME}"
+	start-stop-daemon --stop --quiet \
+		--exec /usr/bin/invpn --pidfile "${VPNPID}"
+	eend $?
+}
+
+reload() {
+	ebegin "Restarting ${SVCNAME} without taking interface down"
+	kill -USR2 `cat "${VPNPID}"`
+	eend $?
+}
+
+# vim: set ts=4 :
