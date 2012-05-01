@@ -48,7 +48,7 @@ start() {
 
 	checkconfig || return 1
 
-	start-stop-daemon --start --exec /usr/bin/invpn --pidfile "${VPNPID}" \
+	start-stop-daemon --start --exec /usr/sbin/invpn --pidfile "${VPNPID}" \
 		--background --make-pidfile -- -c "${VPNCONF}"
 	eend $? "Check your logs to see why startup failed"
 }
@@ -56,7 +56,7 @@ start() {
 stop() {
 	ebegin "Stopping ${SVCNAME}"
 	start-stop-daemon --stop --quiet \
-		--exec /usr/bin/invpn --pidfile "${VPNPID}"
+		--exec /usr/sbin/invpn --pidfile "${VPNPID}"
 	eend $?
 }
 
