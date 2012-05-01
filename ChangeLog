@@ -1,4 +1,6 @@
 v0.3
+	* Setting no_relay prevents data from being relayed by that node
+		(implies no_incoming)
 	* Purge old routes from memory after 5~10 minutes
 	* Changed configuration variables name to add prefix conf_
 	* Support nodes without incoming connections

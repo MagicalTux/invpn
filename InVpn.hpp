@@ -80,6 +80,7 @@ private:
 	int conf_port;
 	int tap_fd_restore;
 	bool conf_no_incoming;
+	bool conf_no_relay;
 
 	QSettings *settings;
 	QSettings *cache;

@@ -179,8 +179,8 @@ void InVpn::announce() {
 	p = qToBigEndian(p);
 	pkt.append((char*)&p, 2);
 
-	if (conf_no_incoming) {
-		// we don't accept incoming connections (firewall, temporary node, etc), so don't broadcast an ip
+	if ((conf_no_incoming) || (conf_no_relay)) {
+		// we don't accept incoming connections (firewall, temporary node, non relaying node, etc), so don't broadcast an ip
 		pkt.append((char)0);
 		pkt.prepend((char)1); // version + include ip (type 0 = no ip)
 	} else {
@@ -351,14 +351,18 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 		if (routes.value(dmac).stamp >= stamp) return;
 		routes[dmac].stamp = stamp;
 		routes[dmac].peer = peer;
-		broadcast(pkt);
+
+		if (!conf_no_relay)
+			broadcast(pkt);
 		return;
 	}
 	struct invpn_route_info s;
 	s.peer = peer;
 	s.stamp = stamp;
 	routes.insert(dmac, s);
-	broadcast(pkt);
+
+	if (!conf_no_relay)
+		broadcast(pkt);
 
 	// also update db
 	QString final_mac = dmac.toHex();
@@ -415,6 +419,7 @@ void InVpn::parseCmdLine() {
 	conf_cert_path = "conf/client.crt";
 	conf_ca_path = "conf/ca.crt";
 	conf_no_incoming = false;
+	conf_no_relay = false;
 
 	QStringList cmdline = QCoreApplication::arguments();
 
@@ -444,7 +449,8 @@ void InVpn::reloadSettings() {
 	settings->endGroup();
 	settings->beginGroup("network");
 	conf_port = settings->value("port", conf_port).toInt();
-	conf_no_incoming = settings->value("no_incoming", conf_no_incoming).toInt();
+	conf_no_incoming = settings->value("no_incoming", conf_no_incoming).toBool();
+	conf_no_relay = settings->value("no_relay", conf_no_relay).toBool();
 	conf_init_seed = settings->value("init").toString();
 	QString new_cache_file = settings->value("cache", conf_cache_file).toString();
 	settings->endGroup();
