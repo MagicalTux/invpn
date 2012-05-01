@@ -26,6 +26,8 @@ Packet types
 
 * 0: initial info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes MAC addr, 2 bytes port
 * 1: info broadcast. 1 byte version (default=1), 8 bytes id, 6 bytes mac, 2 bytes port, 1 byte type (ipv4/ipv6), n bytes ip
+* 2: admin health status request: 1 byte version (default=1), 8 bytes id, 6 bytes mac, n bytes traceroute (each node routing this packet appends its own mac)
+* 3: admin health response: 1 byte version (default=1), 6 bytes dest mac, 6 bytes origin mac, 8 bytes original id, 2 bytes (nconn), n bytes conn info (mac addr of each connection), 2 bytes (n routes), n bytes route info (target mac addr, router mac addr), 2 bytes traceroute len, n bytes traceroute, n bytes reverse traceroute (each node routing this packet appends its own mac)
 * 80: targetted packet. 6 bytes dst, 6 bytes src, data
 * 81: broadcast. 8 bytes id, 6 bytes src, data
 

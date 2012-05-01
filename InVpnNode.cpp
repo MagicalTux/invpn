@@ -28,6 +28,10 @@ bool InVpnNode::checkStamp(qint64 id) {
 	return true;
 }
 
+const QByteArray &InVpnNode::getMac() const {
+	return mac;
+}
+
 void InVpnNode::socketRead() {
 	QSslSocket *s = qobject_cast<QSslSocket*>(sender());
 	if ((s!=link) || (link == NULL)) return;
@@ -110,6 +114,14 @@ void InVpnNode::handlePacket(const QByteArray&pkt) {
 				}
 				parent->announcedRoute(pkt.mid(12, 6), this, stamp, h, port, pkt);
 			}
+			break;
+		case 0x02:
+			// admin packet broadcast + traceroute
+			parent->routeAdminBroadcast(pkt);
+			break;
+		case 0x03:
+			// admin packet route
+			parent->routeAdmin(pkt);
 			break;
 		case 0x80:
 			// targetted packet

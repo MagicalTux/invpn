@@ -377,6 +377,62 @@ void InVpn::announcedRoute(const QByteArray &dmac, InVpnNode *peer, qint64 stamp
 	}
 }
 
+void InVpn::routeAdminBroadcast(const QByteArray&pkt) { // route a 0x02 packet to appropriate nodes & reply to it
+	if ((unsigned char)pkt.at(2) != 0x02) return;
+	QByteArray src_mac = pkt.mid(12, 6);
+	if (src_mac == mac) return;
+	if (!nodes.contains(src_mac)) return;
+
+	qint64 stamp = qFromBigEndian(*(qint64*)pkt.mid(4, 8).constData());
+	if (!nodes.value(src_mac)->checkStamp(stamp)) return;
+
+	// rebroadcast with our own mac added (traceroute)
+	QByteArray pkt_cpy(pkt);
+	pkt_cpy.append(mac);
+	broadcast(pkt_cpy);
+
+	// generate reply as 0x03 and route
+	QByteArray reply;
+	reply.append((char)0x03);
+	reply.append((char)1); // version
+	reply.append(src_mac); // dest mac (reply to)
+	reply.append(mac); // src mac
+	reply.append(pkt.mid(4, 8)); // initial id
+
+	qint16 nconn = 0;
+
+	auto i = nodes.begin();
+	QByteArray tmp;
+	while(i != nodes.end()) {
+		if (!i.value()->isLinked()) continue;
+		nconn++;
+		tmp.append(i.value()->getMac());
+		i++;
+	}
+	reply.append(nconn);
+	reply.append(tmp);
+	
+	nconn = 0; tmp.clear();
+
+	auto j = routes.begin();
+	while(j != routes.end()) {
+		tmp.append(j.key());
+		tmp.append(j.value().peer->getMac());
+		j++; nconn++;
+	}
+
+	reply.append(nconn);
+	reply.append(tmp);
+
+	tmp = pkt.mid(18);
+	reply.append((quint16)(tmp.size()/6));
+	reply.append(tmp);
+
+	reply.append(mac);
+
+	routeAdmin(reply);
+}
+
 void InVpn::routeBroadcast(const QByteArray &pkt) {
 	if ((unsigned char)pkt.at(2) != 0x81) return; // not a broadcast packet
 	QByteArray src_mac = pkt.mid(11, 6);
@@ -401,6 +457,20 @@ void InVpn::route(const QByteArray &pkt) {
 	if (dst_mac == mac) {
 		// that's actually a packet for us
 		tap->write(pkt.mid(3));
+		return;
+	}
+
+//	qDebug("route pkt to %s", dst_mac.toHex().constData());
+	if (!routes.contains(dst_mac)) return;
+	if (!routes.value(dst_mac).peer) return;
+	routes.value(dst_mac).peer->push(pkt);
+}
+
+void InVpn::routeAdmin(const QByteArray &pkt) {
+	if ((unsigned char)pkt.at(2) != 0x03) return; // not a directed packet
+	QByteArray dst_mac = pkt.mid(4, 6);
+	if (dst_mac == mac) {
+		// to ourselves, ignore it
 		return;
 	}
 

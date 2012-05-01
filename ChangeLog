@@ -1,4 +1,5 @@
 v0.3
+	* Added admin packets 0x03 and 0x04 to prepare for admin health check
 	* Setting no_relay prevents data from being relayed by that node
 		(implies no_incoming)
 	* Purge old routes from memory after 5~10 minutes

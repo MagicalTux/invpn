@@ -43,7 +43,9 @@ public slots:
 	void cleanupRoutes();
 
 	void route(const QByteArray&); // route a 0x80 packet to appropriate node
-	void routeBroadcast(const QByteArray&); // route a 0x8& packet to appropriate nodes
+	void routeBroadcast(const QByteArray&); // route a 0x81 packet to appropriate nodes
+	void routeAdminBroadcast(const QByteArray&); // route a 0x02 packet to appropriate nodes & reply to it
+	void routeAdmin(const QByteArray&); // route a 0x03 packet
 
 signals:
 	void broadcast(const QByteArray&);

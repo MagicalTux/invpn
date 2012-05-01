@@ -11,6 +11,7 @@ public:
 
 	bool setLink(QSslSocket*);
 	bool isLinked() const;
+	const QByteArray &getMac() const;
 
 	bool checkStamp(qint64);
 
