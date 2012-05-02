@@ -21,6 +21,22 @@ CA is used to recognize nodes from the same group, and prevent unauthorized
 access to the VPN network. Each node must have its own certificate issued by the
 CA with Common Name set to the node's MAC address.
 
+History
+-------
+
+The idea behind InVPN was born after I've been using another similar VPN
+software for a while. I used to use CloudVPN, and liked it, except for the part
+where I had to tell it how to connect to the other nodes.
+
+A long time later, I finally wrote a first version in C, but never had time to
+finish it. More time later, I rewrote it in C++ using Qt, and within 24 hours I
+was able to get packets to go through this.
+
+Installation
+------------
+
+Please read the INSTALL file.
+
 Packet types
 ------------
 
