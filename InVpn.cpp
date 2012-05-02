@@ -101,10 +101,10 @@ void InVpn::tryConnect() {
 		if (i.value()->isLinked()) count++;
 		i++;
 	}
-	if (count >= 2) return;
+	if (count > 100) return; // limit to 100 cnx
 
 	QStringList keys = cache->allKeys();
-	while((keys.size() > 0) && (count < 2)) {
+	while((keys.size() > 0) && (count < 100)) {
 		// take a random key
 		QString k = keys.takeAt(qrand() % keys.size());
 		// check if already connected
@@ -131,6 +131,9 @@ void InVpn::tryConnect() {
 	}
 	QString rmac = conf_init_seed.mid(0, pos);
 	QString addr = conf_init_seed.mid(pos+1);
+
+	QByteArray rmac_bin = QByteArray::fromHex(rmac.toLatin1().replace(":",""));
+	if ((nodes.contains(rmac_bin)) && (nodes.value(rmac_bin)->isLinked())) return; // already connected
 
 	pos = addr.lastIndexOf(':');
 	if (pos == -1) {

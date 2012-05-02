@@ -1,3 +1,7 @@
+v0.4
+	* Now establishing as many connections as possible (up to 100)
+	* No attempts to connect to init seed anymore if already connected
+
 v0.3
 	* Added admin packets 0x03 and 0x04 to prepare for admin health check
 	* Setting no_relay prevents data from being relayed by that node
