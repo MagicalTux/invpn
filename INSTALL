@@ -1,0 +1,147 @@
+Installing InVPN
+================
+
+InVPN requires you to have Qt installed, with OpenSSL support.
+
+It also requires your kernel to have the tun module enabled and loaded. If
+properly loaded, a /dev/net/tun device should exist. If not, try to
+modprobe tun, and if still unsuccessful, recompile your kernel.
+
+Once everything is ready you can compile InVPN by running the following
+commands:
+
+$ tar xjf invpn-x.y.z.tar.bz2
+$ cd invpn-x.y.z
+$ qmake
+$ make
+...
+$ make install
+...
+
+This will install the /usr/sbin/invpn file.
+
+Now that you have invpn installed, you will need to generate a configuration
+file and some SSL keys.
+
+
+
+Configuring InVPN - the SSL keys
+================================
+
+InVPN uses the SSL protocol to communicate between nodes, however rather than
+trusting all CA on the world, we trust only one CA, which is the one created by
+the maintainer of the network (probably you). This CA will allow you to sign
+requests from nodes wishing to join the network, so its private key should be
+kept secure.
+There is a ton of documentation online on how to create a SSL CA, and we also
+provide an example on the source tarball (in "conf", remember to edit
+"tibanne.cnf" to put your own details, and you'll get keys for two clients).
+
+Anyway if you are still in the InVPN source root, here are some helpful
+commands.
+
+
+
+* Step 1: Generate a CA (needed only once)
+------------------------------------------
+
+CA stands for Certificate Authority. By providing your CA certificate to each
+node as a CA, those nodes will know they can trust any other node whose
+certificate has been signed by the same CA. Note that you can actually give
+more than one CA as authoritative to InVPN instances, meaning those nodes will
+actually accept both authorities. You can also make more complex configurations
+with chains (have one master CA, intermediate CA, and final certificates) but
+we won't be covering this here.
+
+This step is done with only two commands. First, generate a private key and a
+signature request:
+
+$ openssl req -config conf/tibanne.cnf -newkey rsa:4096 -nodes -keyout invpn_ca.key -out invpn_ca.req
+(fill details so it matches you. What you write there has no technical
+reprecussion)
+
+Then self-sign to generate the CA certificate (we make it valid for 6000 days
+here, up to you to choose another value):
+
+$ openssl x509 -req -signkey invpn_ca.key -extfile conf/tibanne.cnf -set_serial 0 -extensions v3_ca -days 6000 -in invpn_ca.req -out invpn_ca.crt
+
+Now you have three files:
+
+* invpn_ca.req: Useless, you can remove it now
+* invpn_ca.crt: That's the certificate of your CA. You will need to copy it to
+                your nodes. You can publish it, if you want too.
+* invpn_ca.key: This is your CA's private key. Keep it in the most secure place
+                as anyone having a copy of this file could join your VPN and/or
+                cause a lot of damage.
+
+
+* Step 2: Generate a node certificate (for each node)
+-----------------------------------------------------
+
+Now that you have your CA, each of your node will need a ceritificate issued by
+your own CA.
+The recommanded way is of course to never copy the node private key outside of
+the node. SSL makes this easy thanks to certificate signing requests. Let's see
+how this goes step by step.
+
+First, run this on the node:
+
+$ openssl req -config conf/tibanne.cnf -newkey rsa:4096 -nodes -keyout invpn.key -out invpn.req
+You can put the details you want, except for "Common Name (eg, YOUR name)
+[CA]", which should be the mac address for this node. Example:
+Common Name (eg, YOUR name) [CA]: 02:50:56:00:00:01
+
+Now that you have a private key and a certificate signature request on your
+node, copy the certificate signature request to your CA host (best if not an
+online system in terms of security and use something like an USB key), then:
+
+$ openssl x509 -req -CA invpn_ca.crt -CAkey invpn_ca.key -extfile conf/tibanne.cnf -CAcreateserial -extensions v3_notca -days 365 -in invpn.req -out invpn.crt
+
+You can now return invpn.crt (and invpn_ca.crt) to the node, and your node
+will be ready for use!
+
+
+Configuring InVPN - the config file
+===================================
+
+Now that your node is ready to be recognized by other nodes thanks to its new
+certificate, you need some configuration.
+
+First, let's make sure we have at least those 3 files:
+
+* invpn.crt: The certificate for the client (gen. by the CA, Step 2.2)
+* invpn.key: The private key for the client (gen. by the client, Step 2.1)
+* invpn_ca.crt: The CA (Step 1)
+
+The configuration file itself is actually easy. Assuming you put all of this in
+the /etc/invpn/ directory (that you need to create yourself), you can then
+create a configuration file that would look like this:
+
+[ssl]
+key=/etc/invpn/invpn.key
+cert=/etc/invpn/invpn.crt
+ca=/etc/invpn/invpn_ca.crt
+[network]
+port=47741
+cache=/etc/invpn/invpn.cache
+
+The [ssl] part should only contain key, cert and ca. The ca file can contain
+more than one certificate concatenated (if many CA).
+
+The [network] part supports the following options:
+
+* port: the port to listen to. Once set you shouldn't change it on a node
+* cache: The cache file where known nodes are recorded
+* init: An initial node to connect to when the cache is empty. It should be the
+        address of a node you know you're going to keep for a long time. The
+        value is written in the format macaddr@ip:port, so it would look like:
+        02:50:56:00:00:01@192.168.0.1:47441
+* no_incoming: Prevent other hosts from connecting to this host (ie. if behind
+               a NAT, setting this option will avoid a lot of useless traffic)
+* no_relay: Set this for low traffic nodes that you want to take part in the
+            network anyway. Also good for non permanent nodes. This implies
+            no_incoming too so no incoming connection will be received either.
+            The main idea behind this option is to use it on a laptop you use
+            to connect to the network from times to times.
+
+
